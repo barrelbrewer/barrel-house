@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Barrel House — Inventory</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Crimson+Text:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#100c06;color:#f0e6d3;font-family:'Crimson Text',serif;min-height:100vh}
+input,select,textarea{font-family:'Crimson Text',serif}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
+.sb{width:210px;background:#0e0a05;border-right:1px solid rgba(255,255,255,.07);position:fixed;top:0;bottom:0;left:0;display:flex;flex-direction:column;z-index:10}
+.pg{margin-left:210px;padding:32px 36px;min-height:100vh}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px}
+.card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:20px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback} = React;
+
+// ── Supabase ──────────────────────────────────────────────────
+const sb = window.supabase.createClient(
+  'https://xhebhzizwwdaorwocfxe.supabase.co',
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhoZWJoeml6d3dkYW9yd29jZnhlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTIxMTQsImV4cCI6MjEwMTU4ODExNH0.vi1_YvCE4k92v0P0toVWIqhs9ggdPLFqMBQdD5qzTXI'
+);
+
+// ── Constants ─────────────────────────────────────────────────
+const QAL={1:'Dump — Unsaleable',2:'Very Poor',3:'Below Average',4:'Fair',5:'Average',6:'Good',7:'Very Good',8:'Perfect — Premium'};
+const QAC={1:'#ef4444',2:'#f97316',3:'#f97316',4:'#eab308',5:'#eab308',6:'#84cc16',7:'#22c55e',8:'#10b981'};
+
+// ── Styles ────────────────────────────────────────────────────
+const iS={width:'100%',background:'rgba(255,255,255,.05)',border:'1px solid rgba(255,255,255,.12)',borderRadius:8,padding:'9px 12px',color:'#f0e6d3',fontSize:14,boxSizing:'border-box',outline:'none'};
+const sS={...iS,background:'#1a1209'};
+const lS={fontSize:11,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4,display:'block'};
+const bP={background:'#c4821f',border:'none',borderRadius:10,color:'#1a0f05',padding:'11px 22px',cursor:'pointer',fontWeight:700,fontSize:14,fontFamily:"'Crimson Text',serif"};
+const bG={background:'transparent',border:'1px solid rgba(255,255,255,.15)',borderRadius:10,color:'#8b7355',padding:'11px 20px',cursor:'pointer',fontSize:14,fontFamily:"'Crimson Text',serif"};
+
+// ── Utils ─────────────────────────────────────────────────────
+const daysBetween=(d1,d2)=>(!d1||!d2)?0:Math.floor((new Date(d2)-new Date(d1))/86400000);
+const calcLateFill=(distFilled,myFilled,thresh=14)=>{
+  if(!distFilled||!myFilled)return{isLate:false,days:0};
+  const d=daysBetween(distFilled,myFilled);
+  return{isLate:d>thresh,days:d};
+};
+const fmt=d=>d?new Date(d+'T12:00:00').toLocaleDateString():'—';
+const scBadge=s=>({active:['#22c55e','Active'],flagged:['#f97316','Flagged'],dump:['#ef4444','Dump']}[s]||['#6b7280',s]);
+
+// ── Login ─────────────────────────────────────────────────────
+function LoginScreen(){
+  const [email,setEmail]=useState('');
+  const [pw,setPw]=useState('');
+  const [err,setErr]=useState('');
+  const [busy,setBusy]=useState(false);
+  const go=async()=>{
+    setBusy(true);setErr('');
+    const{error}=await sb.auth.signInWithPassword({email,password:pw});
+    if(error){setErr(error.message);setBusy(false);}
+  };
+  return(
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh',background:'#100c06'}}>
+      <div style={{width:380,background:'#0e0a05',border:'1px solid rgba(255,255,255,.1)',borderRadius:16,padding:40}}>
+        <div style={{textAlign:'center',marginBottom:32}}>
+          <div style={{fontSize:11,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.15em',marginBottom:8}}>Barrel House</div>
+          <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:'#f0e6d3'}}>Inventory System</h1>
+        </div>
+        {err&&<div style={{background:'#ef444422',border:'1px solid #ef444444',borderRadius:8,padding:'10px 14px',color:'#ef4444',fontSize:13,marginBottom:16}}>{err}</div>}
+        <div style={{marginBottom:14}}>
+          <label style={lS}>Email</label>
+          <input style={iS} type="email" value={email} onChange={e=>setEmail(e.target.value)} onKeyDown={e=>e.key==='Enter'&&go()} placeholder="your@email.com" autoFocus/>
+        </div>
+        <div style={{marginBottom:24}}>
+          <label style={lS}>Password</label>
+          <input style={iS} type="password" value={pw} onChange={e=>setPw(e.target.value)} onKeyDown={e=>e.key==='Enter'&&go()} placeholder="••••••••"/>
+        </div>
+        <button onClick={go} disabled={busy} style={{...bP,width:'100%',opacity:busy?.7:1}}>{busy?'Signing in…':'Sign In'}</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Small Components ──────────────────────────────────────────
+function Toast({msg,color}){
+  return <div style={{position:'fixed',top:24,right:24,background:color||'#22c55e',color:'#fff',borderRadius:10,padding:'12px 20px',fontWeight:600,fontSize:14,zIndex:300,boxShadow:'0 8px 24px rgba(0,0,0,.4)'}}>{msg}</div>;
+}
+
+function Spinner(){
+  return <div style={{display:'flex',alignItems:'center',justifyContent:'center',minHeight:'100vh'}}><div style={{color:'#c4821f',fontSize:14}}>Loading…</div></div>;
+}
+
+function StatCard({label,value,accent,sub}){
+  return(
+    <div style={{background:'rgba(255,255,255,.04)',border:'1px solid rgba(255,255,255,.08)',borderRadius:12,padding:'20px 24px',position:'relative',overflow:'hidden'}}>
+      <div style={{position:'absolute',top:0,left:0,width:3,height:'100%',background:accent,borderRadius:'12px 0 0 12px'}}/>
+      <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:6}}>{label}</div>
+      <div style={{fontSize:30,fontWeight:700,fontFamily:"'Playfair Display',serif",color:'#f0e6d3',lineHeight:1}}>{value}</div>
+      {sub&&<div style={{fontSize:12,color:'#6b5d4f',marginTop:4}}>{sub}</div>}
+    </div>
+  );
+}
+
+function Badge({label,color}){
+  return <span style={{background:color+'22',color,border:`1px solid ${color}44`,borderRadius:6,padding:'2px 7px',fontSize:11,fontWeight:600}}>{label}</span>;
+}
+
+// ── Barrel Modal ──────────────────────────────────────────────
+function BarrelModal({barrel,onClose,onSaved,user,brands,types,dists,sections,threshold}){
+  const isEdit=!!barrel?.id;
+  const [f,setF]=useState({
+    barcode:'',brand_id:'',tanker_code:'',brew_id:'',
+    section_id:'',row_number:'',stack:'',level:'',
+    wet:true,leaky:false,barrel_type_id:'',distillery_id:'',
+    date_filled:'',distillery_date_filled:'',qa_rating:5,notes:'',status:'active',
+    ...(barrel||{})
+  });
+  const [qaNote,setQaNote]=useState('');
+  const [qaRating,setQaRating]=useState(5);
+  const [qaHistory,setQaHistory]=useState([]);
+  const [busy,setBusy]=useState(false);
+  const [err,setErr]=useState('');
+  const ref=useRef(null);
+
+  useEffect(()=>{
+    if(ref.current)ref.current.focus();
+    if(isEdit&&barrel.id){
+      sb.from('qa_history').select('*').eq('barrel_id',barrel.id).order('evaluated_at',{ascending:false})
+        .then(({data})=>setQaHistory(data||[]));
+    }
+  },[]);
+
+  const set=(k,v)=>setF(p=>({...p,[k]:v}));
+
+  const lateFill=calcLateFill(f.distillery_date_filled,f.date_filled,threshold);
+
+  const save=async()=>{
+    if(!f.barcode.trim()){setErr('Barcode is required');return;}
+    setBusy(true);setErr('');
+    const payload={
+      barcode:f.barcode.trim(),brand_id:f.brand_id||null,
+      tanker_code:f.tanker_code||null,brew_id:f.brew_id||null,
+      section_id:f.section_id||null,row_number:f.row_number||null,
+      stack:f.stack||null,level:f.level||null,
+      wet:f.wet,leaky:f.leaky,
+      barrel_type_id:f.barrel_type_id||null,
+      distillery_id:f.distillery_id||null,
+      date_filled:f.date_filled||null,
+      distillery_date_filled:f.distillery_date_filled||null,
+      qa_rating:f.qa_rating||null,
+      pi_late_fill:lateFill.isLate,
+      pi_late_fill_days:lateFill.days,
+      status:f.qa_rating<=1?'dump':f.leaky?'flagged':'active',
+      notes:f.notes||null,
+    };
+    let barrelId=f.id;
+    let res;
+    if(isEdit){
+      res=await sb.from('barrels').update(payload).eq('id',f.id).select().single();
+    } else {
+      payload.created_by=user.id;
+      res=await sb.from('barrels').insert([payload]).select().single();
+      barrelId=res.data?.id;
+    }
+    if(res.error){setErr(res.error.message);setBusy(false);return;}
+    if(f.qa_rating&&barrelId){
+      await sb.from('qa_history').insert([{barrel_id:barrelId,rating:f.qa_rating,note:qaNote||null,evaluated_by:user.id}]);
+    }
+    onSaved();
+  };
+
+  const addQaEntry=async()=>{
+    if(!barrel?.id)return;
+    await sb.from('qa_history').insert([{barrel_id:barrel.id,rating:qaRating,note:qaNote||null,evaluated_by:user.id}]);
+    await sb.from('barrels').update({qa_rating:qaRating,status:qaRating<=1?'dump':f.leaky?'flagged':'active'}).eq('id',barrel.id);
+    const{data}=await sb.from('qa_history').select('*').eq('barrel_id',barrel.id).order('evaluated_at',{ascending:false});
+    setQaHistory(data||[]);
+    set('qa_rating',qaRating);
+    setQaNote('');
+  };
+
+  const fg=(label,ch)=><div style={{marginBottom:14}}><label style={lS}>{label}</label>{ch}</div>;
+
+  return(
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.75)',zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:20}} onClick={onClose}>
+      <div style={{background:'#1a1209',border:'1px solid rgba(255,255,255,.12)',borderRadius:16,width:'100%',maxWidth:700,maxHeight:'92vh',overflowY:'auto',padding:32}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:28}}>
+          <h2 style={{fontFamily:"'Playfair Display',serif",fontSize:22,color:'#f0e6d3'}}>{isEdit?`Barrel ${f.barcode}`:'Add New Barrel'}</h2>
+          <button onClick={onClose} style={{background:'none',border:'none',color:'#6b5d4f',fontSize:22,cursor:'pointer'}}>✕</button>
+        </div>
+
+        {err&&<div style={{background:'#ef444422',border:'1px solid #ef444444',borderRadius:8,padding:'10px 14px',color:'#ef4444',fontSize:13,marginBottom:16}}>{err}</div>}
+
+        {/* Barcode — scan-ready */}
+        <div style={{background:'rgba(196,130,31,.08)',border:'2px solid rgba(196,130,31,.35)',borderRadius:10,padding:'14px 16px',marginBottom:20}}>
+          <label style={{...lS,color:'#c4821f'}}>📡 Barcode — Scan or Type</label>
+          <input ref={ref} style={{...iS,fontFamily:'monospace',fontSize:16,letterSpacing:'.1em'}} value={f.barcode} onChange={e=>set('barcode',e.target.value)} placeholder="Scan barcode or type here…"/>
+        </div>
+
+        {/* Late fill warning */}
+        {lateFill.isLate&&(
+          <div style={{background:'#f9731622',border:'1px solid #f9731644',borderRadius:8,padding:'10px 14px',color:'#f97316',fontSize:13,marginBottom:16}}>
+            ⚠ PI FLAG: Late Fill — {lateFill.days} days between distillery fill and your fill date (threshold: {threshold} days)
+          </div>
+        )}
+
+        <div className="g2">
+          {fg("Brand",<select style={sS} value={f.brand_id} onChange={e=>set('brand_id',e.target.value)}><option value="">— Select —</option>{brands.map(b=><option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}</select>)}
+          {fg("Barrel Type",<select style={sS} value={f.barrel_type_id} onChange={e=>set('barrel_type_id',e.target.value)}><option value="">— Select —</option>{types.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>)}
+          {fg("Tanker Code",<input style={iS} value={f.tanker_code} onChange={e=>set('tanker_code',e.target.value)} placeholder="e.g. TK-22A"/>)}
+          {fg("Brew ID",<input style={iS} value={f.brew_id} onChange={e=>set('brew_id',e.target.value)} placeholder="e.g. BR-441"/>)}
+          {fg("Source Distillery",<select style={sS} value={f.distillery_id} onChange={e=>set('distillery_id',e.target.value)}><option value="">— Select —</option>{dists.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select>)}
+          {fg("Section",<select style={sS} value={f.section_id} onChange={e=>set('section_id',e.target.value)}><option value="">— Select —</option>{sections.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>)}
+          {fg("Row",<input style={iS} value={f.row_number} onChange={e=>set('row_number',e.target.value)} placeholder="e.g. 3"/>)}
+          {fg("Stack",<input style={iS} value={f.stack} onChange={e=>set('stack',e.target.value)} placeholder="e.g. 2"/>)}
+          {fg("Level",<input style={iS} value={f.level} onChange={e=>set('level',e.target.value)} placeholder="e.g. 1"/>)}
+          {fg("Date You Filled",<input style={iS} type="date" value={f.date_filled} onChange={e=>set('date_filled',e.target.value)}/>)}
+          {fg("Distillery Fill Date",<input style={iS} type="date" value={f.distillery_date_filled} onChange={e=>set('distillery_date_filled',e.target.value)}/>)}
+          <div/>
+        </div>
+
+        <div style={{display:'flex',gap:24,marginBottom:20}}>
+          {[['wet','💧 Wet Barrel'],['leaky','🚨 Leaking']].map(([k,l])=>(
+            <label key={k} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',color:'#a09080',fontSize:14}}>
+              <input type="checkbox" checked={f[k]} onChange={e=>set(k,e.target.checked)} style={{accentColor:'#c4821f',width:16,height:16}}/>{l}
+            </label>
+          ))}
+        </div>
+
+        {fg("Notes",<textarea style={{...iS,minHeight:60,resize:'vertical'}} value={f.notes} onChange={e=>set('notes',e.target.value)} placeholder="Any additional notes…"/>)}
+
+        {/* QA */}
+        <div className="card" style={{marginBottom:20}}>
+          <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>🥃 {isEdit?'Add QA Evaluation':'Initial QA Rating'}</div>
+          <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+            {[1,2,3,4,5,6,7,8].map(n=>(
+              <button key={n} onClick={()=>isEdit?setQaRating(n):set('qa_rating',n)}
+                style={{width:40,height:40,borderRadius:8,border:`2px solid ${(isEdit?qaRating:f.qa_rating)===n?QAC[n]:'rgba(255,255,255,.1)'}`,background:(isEdit?qaRating:f.qa_rating)===n?QAC[n]+'33':'transparent',color:(isEdit?qaRating:f.qa_rating)===n?QAC[n]:'#6b5d4f',fontWeight:700,cursor:'pointer',fontSize:15}}>{n}</button>
+            ))}
+          </div>
+          <div style={{fontSize:12,color:QAC[isEdit?qaRating:f.qa_rating],marginBottom:12,fontWeight:600}}>QA {isEdit?qaRating:f.qa_rating} — {QAL[isEdit?qaRating:f.qa_rating]}</div>
+          <div style={{display:'flex',gap:10}}>
+            <input style={{...iS,flex:1}} value={qaNote} onChange={e=>setQaNote(e.target.value)} placeholder="Tasting note…"/>
+            {isEdit&&<button onClick={addQaEntry} style={{...bP,padding:'9px 16px'}}>Log</button>}
+          </div>
+          {isEdit&&qaHistory.length>0&&(
+            <div style={{marginTop:14}}>
+              <div style={{fontSize:11,color:'#6b5d4f',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:8}}>History</div>
+              {qaHistory.map(h=>(
+                <div key={h.id} style={{display:'flex',gap:10,padding:'6px 0',borderTop:'1px solid rgba(255,255,255,.05)'}}>
+                  <span style={{fontFamily:'monospace',fontSize:11,color:'#6b5d4f',minWidth:90}}>{fmt(h.evaluated_at)}</span>
+                  <span style={{color:QAC[h.rating],fontWeight:700,minWidth:20}}>{h.rating}</span>
+                  <span style={{fontSize:12,color:'#8b7355'}}>{h.note||'—'}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+          <button onClick={onClose} style={bG}>Cancel</button>
+          <button onClick={save} disabled={busy} style={{...bP,opacity:busy?.7:1}}>{busy?'Saving…':isEdit?'Update Barrel':'Add Barrel'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Batch Scanner ─────────────────────────────────────────────
+function BatchPage({user,brands,types,dists,sections,threshold,onDone,showToast}){
+  const [mode,setMode]=useState('add');
+  const [phase,setPhase]=useState('scan');
+  const [scanned,setScanned]=useState([]);
+  const [cur,setCur]=useState('');
+  const [shared,setShared]=useState({brand_id:'',tanker_code:'',brew_id:'',section_id:'',row_number:'',stack:'',level:'',wet:true,leaky:false,barrel_type_id:'',distillery_id:'',date_filled:'',distillery_date_filled:'',qa_rating:5,qa_note:''});
+  const [busy,setBusy]=useState(false);
+  const ref=useRef(null);
+
+  useEffect(()=>{if(phase==='scan'&&ref.current)ref.current.focus();},[phase]);
+
+  const setSF=(k,v)=>setShared(s=>({...s,[k]:v}));
+
+  const handleKey=useCallback(async(e)=>{
+    if(e.key!=='Enter'||!cur.trim())return;
+    const code=cur.trim(); setCur('');
+    if(scanned.some(s=>s.barcode===code)){setScanned(p=>[...p,{barcode:code,st:'dup',ts:new Date().toLocaleTimeString()}]);return;}
+    const{data}=await sb.from('barrels').select('id').eq('barcode',code).maybeSingle();
+    const st=data?(mode==='add'?'exists':'found'):'ok';
+    if(mode==='qa'&&!data)setScanned(p=>[...p,{barcode:code,st:'notfound',ts:new Date().toLocaleTimeString()}]);
+    else setScanned(p=>[...p,{barcode:code,st,id:data?.id,ts:new Date().toLocaleTimeString()}]);
+  },[cur,scanned,mode]);
+
+  const okItems=scanned.filter(s=>s.st==='ok'||(mode==='qa'&&s.st==='found'));
+  const lateFill=calcLateFill(shared.distillery_date_filled,shared.date_filled,threshold);
+
+  const commit=async()=>{
+    setBusy(true);
+    if(mode==='add'){
+      const rows=okItems.map(s=>({
+        barcode:s.barcode,brand_id:shared.brand_id||null,tanker_code:shared.tanker_code||null,brew_id:shared.brew_id||null,
+        section_id:shared.section_id||null,row_number:shared.row_number||null,stack:shared.stack||null,level:shared.level||null,
+        wet:shared.wet,leaky:shared.leaky,barrel_type_id:shared.barrel_type_id||null,distillery_id:shared.distillery_id||null,
+        date_filled:shared.date_filled||null,distillery_date_filled:shared.distillery_date_filled||null,
+        qa_rating:shared.qa_rating,pi_late_fill:lateFill.isLate,pi_late_fill_days:lateFill.days,
+        status:shared.qa_rating<=1?'dump':shared.leaky?'flagged':'active',created_by:user.id
+      }));
+      const{data:inserted,error}=await sb.from('barrels').insert(rows).select('id,barcode');
+      if(!error&&shared.qa_rating&&inserted){
+        const qaRows=inserted.map(b=>({barrel_id:b.id,rating:shared.qa_rating,note:shared.qa_note||null,evaluated_by:user.id}));
+        await sb.from('qa_history').insert(qaRows);
+      }
+    } else {
+      for(const s of okItems){
+        await sb.from('barrels').update({qa_rating:shared.qa_rating,status:shared.qa_rating<=1?'dump':'active'}).eq('id',s.id);
+        await sb.from('qa_history').insert([{barrel_id:s.id,rating:shared.qa_rating,note:shared.qa_note||null,evaluated_by:user.id}]);
+      }
+    }
+    setBusy(false);
+    showToast(`✓ ${okItems.length} barrels ${mode==='add'?'added':'updated'}`);
+    setPhase('done');
+    onDone();
+  };
+
+  const fg=(l,ch)=><div style={{marginBottom:12}}><label style={lS}>{l}</label>{ch}</div>;
+
+  return(
+    <div>
+      <div style={{marginBottom:28}}>
+        <div style={{fontSize:12,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:4}}>Operations</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:'#f0e6d3'}}>Batch Scanner</h1>
+      </div>
+
+      {phase==='scan'&&(
+        <div style={{display:'flex',gap:8,marginBottom:24,background:'rgba(255,255,255,.03)',border:'1px solid rgba(255,255,255,.08)',borderRadius:12,padding:6,width:'fit-content'}}>
+          {[{id:'add',label:'📦 Batch Add'},{id:'qa',label:'🥃 Batch QA Update'}].map(m=>(
+            <button key={m.id} onClick={()=>{setMode(m.id);setScanned([]);}} style={{background:mode===m.id?'#c4821f':'transparent',border:'none',borderRadius:8,color:mode===m.id?'#1a0f05':'#6b5d4f',padding:'10px 20px',cursor:'pointer',fontWeight:mode===m.id?700:400,fontSize:14,fontFamily:"'Crimson Text',serif"}}>{m.label}</button>
+          ))}
+        </div>
+      )}
+
+      {phase==='scan'&&(
+        <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:20}}>
+          <div>
+            <div style={{background:'rgba(196,130,31,.08)',border:'2px solid rgba(196,130,31,.4)',borderRadius:14,padding:22,marginBottom:16}}>
+              <div style={{fontSize:13,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.1em',marginBottom:12}}>📡 Scanner Active</div>
+              <input ref={ref} value={cur} onChange={e=>setCur(e.target.value)} onKeyDown={handleKey} placeholder="Pull trigger or type + Enter" style={{...iS,fontFamily:'monospace',fontSize:17,letterSpacing:'.1em',padding:'13px 14px'}}/>
+              <div style={{fontSize:11,color:'#6b5d4f',marginTop:8}}>Each scan auto-appends below</div>
+            </div>
+            <div style={{display:'flex',gap:10,marginBottom:14}}>
+              {[{l:'Scanned',v:scanned.length,c:'#c4821f'},{l:'Ready',v:okItems.length,c:'#22c55e'},{l:'Skipped',v:scanned.length-okItems.length,c:'#6b5d4f'}].map(s=>(
+                <div key={s.l} style={{flex:1,background:'rgba(255,255,255,.03)',border:`1px solid ${s.c}33`,borderRadius:10,padding:'10px 14px',textAlign:'center'}}>
+                  <div style={{fontSize:24,fontFamily:"'Playfair Display',serif",color:s.c,fontWeight:700}}>{s.v}</div>
+                  <div style={{fontSize:10,color:'#6b5d4f',textTransform:'uppercase',letterSpacing:'.08em'}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            <div style={{background:'rgba(255,255,255,.02)',border:'1px solid rgba(255,255,255,.07)',borderRadius:12,maxHeight:340,overflowY:'auto'}}>
+              {scanned.length===0&&<div style={{padding:48,textAlign:'center',color:'#4a3f35'}}>No barcodes scanned yet</div>}
+              {[...scanned].reverse().map((s,i)=>(
+                <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 14px',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                  <div style={{width:8,height:8,borderRadius:'50%',background:{ok:'#22c55e',found:'#22c55e',dup:'#eab308',exists:'#f97316',notfound:'#ef4444'}[s.st]}}/>
+                  <span style={{fontFamily:'monospace',fontSize:14,color:'#f0e6d3',flex:1}}>{s.barcode}</span>
+                  <span style={{fontSize:11,color:'#4a3f35'}}>{s.ts}</span>
+                  {s.st!=='ok'&&s.st!=='found'&&<span style={{fontSize:10,color:'#f97316',border:'1px solid #f9731644',borderRadius:4,padding:'1px 5px'}}>{s.st.toUpperCase()}</span>}
+                  <button onClick={()=>setScanned(p=>p.filter((_,j)=>j!==scanned.length-1-i))} style={{background:'none',border:'none',color:'#4a3f35',cursor:'pointer',fontSize:16}}>✕</button>
+                </div>
+              ))}
+            </div>
+            {scanned.length>0&&(
+              <div style={{display:'flex',gap:10,marginTop:14}}>
+                <button onClick={()=>setScanned([])} style={bG}>Clear All</button>
+                <button onClick={()=>setPhase('assign')} style={{...bP,flex:1,opacity:okItems.length===0?.5:1}} disabled={okItems.length===0}>Next: {mode==='add'?'Assign Details':'Set QA'} ({okItems.length}) →</button>
+              </div>
+            )}
+          </div>
+          <div className="card">
+            <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>How It Works</div>
+            <div style={{fontSize:13,color:'#6b5d4f',lineHeight:1.8}}>
+              <div style={{marginBottom:10}}><span style={{color:'#c4821f'}}>1.</span> {mode==='add'?'Scan all new barrels. No limit.':'Scan barrels to update QA.'}</div>
+              <div style={{marginBottom:10}}><span style={{color:'#c4821f'}}>2.</span> {mode==='add'?'Set shared info — location, brand, dates.':'Set QA rating and tasting note.'}</div>
+              <div><span style={{color:'#c4821f'}}>3.</span> Review and commit to database.</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {phase==='assign'&&(
+        <div style={{maxWidth:700}}>
+          <div style={{background:'rgba(196,130,31,.08)',border:'1px solid rgba(196,130,31,.25)',borderRadius:10,padding:'12px 18px',marginBottom:20,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <span style={{fontSize:13,color:'#c4821f'}}>{mode==='add'?`Setting details for ${okItems.length} barrels`:`Logging QA for ${okItems.length} barrels`}</span>
+            <button onClick={()=>setPhase('scan')} style={{background:'none',border:'none',color:'#6b5d4f',cursor:'pointer',fontSize:13}}>← Back</button>
+          </div>
+          {mode==='add'&&(
+            <>
+              <div className="card" style={{marginBottom:14}}>
+                <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>Brand & Product — Shared for All {okItems.length} Barrels</div>
+                <div className="g2">
+                  {fg("Brand",<select style={sS} value={shared.brand_id} onChange={e=>setSF('brand_id',e.target.value)}><option value="">— Select —</option>{brands.map(b=><option key={b.id} value={b.id}>{b.name}</option>)}</select>)}
+                  {fg("Barrel Type",<select style={sS} value={shared.barrel_type_id} onChange={e=>setSF('barrel_type_id',e.target.value)}><option value="">— Select —</option>{types.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select>)}
+                  {fg("Tanker Code",<input style={iS} value={shared.tanker_code} onChange={e=>setSF('tanker_code',e.target.value)} placeholder="e.g. TK-22A"/>)}
+                  {fg("Brew ID",<input style={iS} value={shared.brew_id} onChange={e=>setSF('brew_id',e.target.value)} placeholder="e.g. BR-441"/>)}
+                  {fg("Distillery",<select style={sS} value={shared.distillery_id} onChange={e=>setSF('distillery_id',e.target.value)}><option value="">— Select —</option>{dists.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select>)}
+                  {fg("Section",<select style={sS} value={shared.section_id} onChange={e=>setSF('section_id',e.target.value)}><option value="">— Select —</option>{sections.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select>)}
+                  {fg("Row",<input style={iS} value={shared.row_number} onChange={e=>setSF('row_number',e.target.value)}/>)}
+                  {fg("Stack",<input style={iS} value={shared.stack} onChange={e=>setSF('stack',e.target.value)}/>)}
+                  {fg("Level",<input style={iS} value={shared.level} onChange={e=>setSF('level',e.target.value)}/>)}
+                  {fg("Date You Filled",<input style={iS} type="date" value={shared.date_filled} onChange={e=>setSF('date_filled',e.target.value)}/>)}
+                  {fg("Distillery Fill Date",<input style={iS} type="date" value={shared.distillery_date_filled} onChange={e=>setSF('distillery_date_filled',e.target.value)}/>)}
+                  <div/>
+                </div>
+                {lateFill.isLate&&<div style={{background:'#f9731622',border:'1px solid #f9731644',borderRadius:8,padding:'10px 14px',color:'#f97316',fontSize:13,marginTop:8}}>⚠ PI FLAG: Late Fill — {lateFill.days} days (threshold: {threshold} days)</div>}
+                <div style={{display:'flex',gap:20,marginTop:14}}>
+                  {[['wet','💧 Wet'],['leaky','🚨 Leaking']].map(([k,l])=>(
+                    <label key={k} style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',color:'#a09080',fontSize:14}}>
+                      <input type="checkbox" checked={shared[k]} onChange={e=>setSF(k,e.target.checked)} style={{accentColor:'#c4821f',width:16,height:16}}/>{l}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+          <div className="card" style={{marginBottom:20}}>
+            <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>🥃 QA Rating — Applied to All</div>
+            <div style={{display:'flex',gap:8,marginBottom:12,flexWrap:'wrap'}}>
+              {[1,2,3,4,5,6,7,8].map(n=>(
+                <button key={n} onClick={()=>setSF('qa_rating',n)} style={{width:44,height:44,borderRadius:8,border:`2px solid ${shared.qa_rating===n?QAC[n]:'rgba(255,255,255,.1)'}`,background:shared.qa_rating===n?QAC[n]+'33':'transparent',color:shared.qa_rating===n?QAC[n]:'#6b5d4f',fontWeight:700,cursor:'pointer',fontSize:16}}>{n}</button>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:QAC[shared.qa_rating],marginBottom:12,fontWeight:600}}>QA {shared.qa_rating} — {QAL[shared.qa_rating]}</div>
+            <input style={iS} value={shared.qa_note} onChange={e=>setSF('qa_note',e.target.value)} placeholder="Shared tasting note…"/>
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+            <button onClick={()=>setPhase('scan')} style={bG}>← Back</button>
+            <button onClick={()=>setPhase('review')} style={bP}>Review & Confirm →</button>
+          </div>
+        </div>
+      )}
+
+      {phase==='review'&&(
+        <div style={{maxWidth:700}}>
+          <div style={{background:'rgba(196,130,31,.08)',border:'1px solid rgba(196,130,31,.25)',borderRadius:10,padding:'16px 18px',marginBottom:20}}>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:'#f0e6d3',marginBottom:8}}>Ready to {mode==='add'?'add':'update'} {okItems.length} barrels</div>
+            <div style={{display:'flex',gap:12,flexWrap:'wrap'}}>
+              <span style={{fontSize:12,color:QAC[shared.qa_rating]}}>· QA {shared.qa_rating} — {QAL[shared.qa_rating]}</span>
+              {lateFill.isLate&&<span style={{fontSize:12,color:'#f97316'}}>· ⚠ Late Fill PI ({lateFill.days} days)</span>}
+            </div>
+          </div>
+          <div className="card" style={{maxHeight:380,overflowY:'auto',marginBottom:20}}>
+            {scanned.map((s,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:10,padding:'9px 0',borderBottom:'1px solid rgba(255,255,255,.05)',opacity:(s.st==='ok'||s.st==='found')?1:.35}}>
+                <span style={{fontFamily:'monospace',fontSize:14,color:'#f0e6d3',flex:1}}>{s.barcode}</span>
+                <span style={{fontSize:11,color:(s.st==='ok'||s.st==='found')?'#22c55e':'#f97316'}}>{(s.st==='ok'||s.st==='found')?'✓ Ready':'Skipped'}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+            <button onClick={()=>setPhase('assign')} style={bG}>← Edit</button>
+            <button onClick={commit} disabled={busy} style={{...bP,background:'#22c55e',opacity:busy?.7:1}}>{busy?'Saving…':`✓ Commit ${okItems.length} Barrels`}</button>
+          </div>
+        </div>
+      )}
+
+      {phase==='done'&&(
+        <div style={{maxWidth:440,textAlign:'center',padding:'60px 40px',background:'rgba(34,197,94,.06)',border:'1px solid rgba(34,197,94,.2)',borderRadius:16}}>
+          <div style={{fontSize:52,marginBottom:16}}>✓</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:24,color:'#22c55e',marginBottom:8}}>{okItems.length} Barrels {mode==='add'?'Added':'Updated'}</div>
+          <div style={{fontSize:14,color:'#6b5d4f',marginBottom:24}}>QA {shared.qa_rating} — {QAL[shared.qa_rating]}</div>
+          <button onClick={()=>{setScanned([]);setCur('');setPhase('scan');}} style={bP}>Scan Another Batch</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Settings Page ─────────────────────────────────────────────
+function SettingsPage({threshold,setThreshold,brands,setBrands,types,setTypes,dists,setDists,sections,setSections,showToast}){
+  const [tab,setTab]=useState('general');
+  const [newThresh,setNewThresh]=useState(String(threshold));
+  const [newName,setNewName]=useState('');
+  const [newCode,setNewCode]=useState('');
+
+  const saveThreshold=async()=>{
+    await sb.from('settings').upsert({key:'late_fill_threshold_days',value:newThresh,updated_at:new Date().toISOString()});
+    setThreshold(parseInt(newThresh));
+    showToast('Threshold updated');
+  };
+
+  const addBrand=async()=>{
+    if(!newName||!newCode)return;
+    const{data}=await sb.from('brands').insert([{name:newName,code:newCode.toUpperCase()}]).select().single();
+    if(data){setBrands(p=>[...p,data]);setNewName('');setNewCode('');showToast('Brand added');}
+  };
+
+  const addSimple=async(table,setter,name)=>{
+    if(!name.trim())return;
+    const{data}=await sb.from(table).insert([{name:name.trim()}]).select().single();
+    if(data){setter(p=>[...p,data]);showToast(`${table==='barrel_types'?'Type':table==='distilleries'?'Distillery':'Section'} added`);}
+    return data;
+  };
+
+  const [newType,setNewType]=useState('');
+  const [newDist,setNewDist]=useState('');
+  const [newSec,setNewSec]=useState('');
+
+  const tabs=[{id:'general',label:'General'},{id:'brands',label:'Brands'},{id:'types',label:'Barrel Types'},{id:'distilleries',label:'Distilleries'},{id:'sections',label:'Sections'}];
+
+  return(
+    <div>
+      <div style={{marginBottom:28}}>
+        <div style={{fontSize:12,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:4}}>Admin</div>
+        <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:'#f0e6d3'}}>Settings</h1>
+      </div>
+      <div style={{display:'flex',gap:6,marginBottom:24,flexWrap:'wrap'}}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{background:tab===t.id?'#c4821f':'rgba(255,255,255,.04)',border:`1px solid ${tab===t.id?'#c4821f':'rgba(255,255,255,.08)'}`,borderRadius:8,color:tab===t.id?'#1a0f05':'#6b5d4f',padding:'9px 18px',cursor:'pointer',fontSize:13,fontFamily:"'Crimson Text',serif"}}>{t.label}</button>
+        ))}
+      </div>
+
+      {tab==='general'&&(
+        <div className="card" style={{maxWidth:420}}>
+          <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:16}}>Late Fill Threshold</div>
+          <div style={{fontSize:13,color:'#6b5d4f',marginBottom:14}}>Barrels filled more than this many days after the distillery fill date will be flagged as a Process Indicator.</div>
+          <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+            <div style={{flex:1}}>
+              <label style={lS}>Days (current: {threshold})</label>
+              <input style={iS} type="number" min="1" max="90" value={newThresh} onChange={e=>setNewThresh(e.target.value)}/>
+            </div>
+            <button onClick={saveThreshold} style={bP}>Save</button>
+          </div>
+        </div>
+      )}
+
+      {tab==='brands'&&(
+        <div style={{maxWidth:500}}>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>Add Brand</div>
+            <div className="g2" style={{marginBottom:12}}>
+              <div><label style={lS}>Brand Name</label><input style={iS} value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. BCS"/></div>
+              <div><label style={lS}>Brand Code</label><input style={iS} value={newCode} onChange={e=>setNewCode(e.target.value)} placeholder="e.g. BCS"/></div>
+            </div>
+            <button onClick={addBrand} style={bP}>+ Add Brand</button>
+          </div>
+          <div className="card">
+            <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>Current Brands</div>
+            {brands.map(b=>(
+              <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                <span style={{color:'#f0e6d3'}}>{b.name}</span>
+                <span style={{fontFamily:'monospace',fontSize:12,color:'#8b7355'}}>{b.code}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {tab==='types'&&(
+        <div style={{maxWidth:400}}>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Add Barrel Type</div>
+            <div style={{display:'flex',gap:10}}>
+              <input style={{...iS,flex:1}} value={newType} onChange={e=>setNewType(e.target.value)} placeholder="e.g. Port Wine"/>
+              <button onClick={async()=>{if(await addSimple('barrel_types',setTypes,newType))setNewType('');}} style={bP}>+</button>
+            </div>
+          </div>
+          <div className="card">{types.map(t=><div key={t.id} style={{padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.05)',color:'#f0e6d3',fontSize:14}}>{t.name}</div>)}</div>
+        </div>
+      )}
+
+      {tab==='distilleries'&&(
+        <div style={{maxWidth:400}}>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Add Distillery</div>
+            <div style={{display:'flex',gap:10}}>
+              <input style={{...iS,flex:1}} value={newDist} onChange={e=>setNewDist(e.target.value)} placeholder="e.g. Bardstown Bourbon"/>
+              <button onClick={async()=>{if(await addSimple('distilleries',setDists,newDist))setNewDist('');}} style={bP}>+</button>
+            </div>
+          </div>
+          <div className="card">{dists.map(d=><div key={d.id} style={{padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.05)',color:'#f0e6d3',fontSize:14}}>{d.name}</div>)}</div>
+        </div>
+      )}
+
+      {tab==='sections'&&(
+        <div style={{maxWidth:400}}>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:12}}>Add Section</div>
+            <div style={{display:'flex',gap:10}}>
+              <input style={{...iS,flex:1}} value={newSec} onChange={e=>setNewSec(e.target.value)} placeholder="e.g. C1N"/>
+              <button onClick={async()=>{if(await addSimple('sections',setSections,newSec))setNewSec('');}} style={bP}>+</button>
+            </div>
+          </div>
+          <div className="card">{sections.map(s=><div key={s.id} style={{padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.05)',color:'#f0e6d3',fontSize:14}}>{s.name}</div>)}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main App ──────────────────────────────────────────────────
+function App(){
+  const [user,setUser]=useState(null);
+  const [profile,setProfile]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [barrels,setBarrels]=useState([]);
+  const [brands,setBrands]=useState([]);
+  const [types,setTypes]=useState([]);
+  const [dists,setDists]=useState([]);
+  const [sections,setSections]=useState([]);
+  const [threshold,setThreshold]=useState(14);
+  const [page,setPage]=useState('dashboard');
+  const [toast,setToast]=useState(null);
+  const [search,setSearch]=useState('');
+  const [filters,setFilters]=useState({section:'',type:'',status:'',leaky:false,late:false});
+  const [modalBarrel,setModalBarrel]=useState(null);
+  const [isNew,setIsNew]=useState(false);
+  const [dataLoading,setDataLoading]=useState(false);
+
+  const showToast=(msg,color='#22c55e')=>{setToast({msg,color});setTimeout(()=>setToast(null),3500);};
+
+  // Auth listener
+  useEffect(()=>{
+    sb.auth.getSession().then(({data:{session}})=>{setUser(session?.user??null);setLoading(false);});
+    const{data:{subscription}}=sb.auth.onAuthStateChange((_,session)=>{
+      setUser(session?.user??null);
+      if(!session)setLoading(false);
+    });
+    return()=>subscription.unsubscribe();
+  },[]);
+
+  const loadAll=async()=>{
+    setDataLoading(true);
+    const[prof,br,ty,di,se,st,ba]=await Promise.all([
+      sb.from('profiles').select('*').eq('id',user.id).single(),
+      sb.from('brands').select('*').eq('active',true).order('name'),
+      sb.from('barrel_types').select('*').eq('active',true).order('name'),
+      sb.from('distilleries').select('*').eq('active',true).order('name'),
+      sb.from('sections').select('*').eq('active',true).order('sort_order'),
+      sb.from('settings').select('*'),
+      sb.from('barrels').select('*,brands(name,code),barrel_types(name),distilleries(name),sections(name,sort_order)').order('created_at',{ascending:false}),
+    ]);
+    setProfile(prof.data);
+    setBrands(br.data||[]);
+    setTypes(ty.data||[]);
+    setDists(di.data||[]);
+    setSections(se.data||[]);
+    const t=st.data?.find(s=>s.key==='late_fill_threshold_days');
+    setThreshold(parseInt(t?.value||'14'));
+    setBarrels(ba.data||[]);
+    setDataLoading(false);
+  };
+
+  useEffect(()=>{if(user)loadAll();},[user]);
+
+  if(loading)return <Spinner/>;
+  if(!user)return <LoginScreen/>;
+  if(dataLoading)return <Spinner/>;
+
+  const isAdmin=profile?.role==='admin';
+
+  // Barrel list with PI enrichment
+  const enriched=barrels.map(b=>{
+    const lf=calcLateFill(b.distillery_date_filled,b.date_filled,threshold);
+    return{...b,_lateFill:lf.isLate,_lateDays:lf.days};
+  });
+
+  const filtered=enriched.filter(b=>{
+    const q=search.toLowerCase();
+    const m=!q||b.barcode?.toLowerCase().includes(q)||b.brands?.name?.toLowerCase().includes(q)||b.brew_id?.toLowerCase().includes(q)||b.tanker_code?.toLowerCase().includes(q)||b.distilleries?.name?.toLowerCase().includes(q);
+    return m&&(!filters.section||b.sections?.name===filters.section)&&(!filters.type||b.barrel_types?.name===filters.type)&&(!filters.status||b.status===filters.status)&&(!filters.leaky||b.leaky)&&(!filters.late||b._lateFill);
+  });
+
+  const total=enriched.length;
+  const active=enriched.filter(b=>b.status==='active').length;
+  const leakers=enriched.filter(b=>b.leaky).length;
+  const dumps=enriched.filter(b=>b.status==='dump').length;
+  const lateFills=enriched.filter(b=>b._lateFill).length;
+  const avgQa=total>0?(enriched.filter(b=>b.qa_rating).reduce((a,b)=>a+(b.qa_rating||0),0)/enriched.filter(b=>b.qa_rating).length).toFixed(1):'—';
+
+  const saveDone=()=>{setModalBarrel(null);loadAll();showToast(isNew?'Barrel added':'Barrel updated');};
+
+  const exportCSV=()=>{
+    const h=['Barcode','Brand','Brand Code','Tanker Code','Brew ID','Section','Row','Stack','Level','Wet','Leaky','Type','Distillery','Date Filled','Distillery Fill Date','QA Rating','Status','PI Late Fill','Late Fill Days'];
+    const r=enriched.map(b=>[b.barcode,b.brands?.name,b.brands?.code,b.tanker_code,b.brew_id,b.sections?.name,b.row_number,b.stack,b.level,b.wet?'Yes':'No',b.leaky?'Yes':'No',b.barrel_types?.name,b.distilleries?.name,b.date_filled,b.distillery_date_filled,b.qa_rating,b.status,b._lateFill?'Yes':'No',b._lateDays]);
+    const csv=[h,...r].map(x=>x.map(v=>v??'').join(',')).join('\n');
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='barrel_house_inventory.csv';a.click();
+    showToast('CSV exported!');
+  };
+
+  const nav=[
+    {id:'dashboard',label:'Dashboard',icon:'⬡'},
+    {id:'inventory',label:'Inventory',icon:'▦'},
+    {id:'batch',label:'Batch Scan',icon:'◉',badge:'SCAN'},
+    {id:'locations',label:'Locations',icon:'◈'},
+    {id:'reports',label:'Reports',icon:'◎'},
+    ...(isAdmin?[{id:'settings',label:'Settings',icon:'⚙'}]:[]),
+  ];
+
+  return(
+    <div style={{display:'flex',minHeight:'100vh'}}>
+      {toast&&<Toast msg={toast.msg} color={toast.color}/>}
+
+      {/* Sidebar */}
+      <div className="sb">
+        <div style={{padding:'28px 20px 20px',borderBottom:'1px solid rgba(255,255,255,.07)'}}>
+          <div style={{fontSize:11,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.15em',marginBottom:4}}>Barrel House</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:18,color:'#f0e6d3',lineHeight:1.2}}>Inventory<br/>System</div>
+        </div>
+        <nav style={{flex:1,padding:'16px 12px'}}>
+          {nav.map(n=>(
+            <button key={n.id} onClick={()=>setPage(n.id)} style={{display:'flex',alignItems:'center',gap:10,width:'100%',padding:'11px 12px',borderRadius:8,border:'none',background:page===n.id?'rgba(196,130,31,.15)':'transparent',color:page===n.id?'#c4821f':'#6b5d4f',cursor:'pointer',fontSize:14,textAlign:'left',marginBottom:2,transition:'all .15s',fontFamily:"'Crimson Text',serif"}}>
+              <span style={{fontSize:13}}>{n.icon}</span>
+              <span style={{flex:1}}>{n.label}</span>
+              {n.badge&&<span style={{fontSize:9,background:'#22c55e22',color:'#22c55e',border:'1px solid #22c55e44',borderRadius:4,padding:'1px 5px'}}>{n.badge}</span>}
+            </button>
+          ))}
+        </nav>
+        <div style={{padding:'14px 20px',borderTop:'1px solid rgba(255,255,255,.07)',borderBottom:'1px solid rgba(255,255,255,.07)'}}>
+          <div style={{fontSize:11,color:'#6b5d4f',marginBottom:4}}>Inventory</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:26,color:'#c4821f'}}>{total}</div>
+          <div style={{fontSize:11,color:'#4a3f35'}}>barrels tracked</div>
+          {lateFills>0&&<div style={{fontSize:11,color:'#f97316',marginTop:4}}>⚠ {lateFills} late fill PI</div>}
+        </div>
+        <div style={{padding:'14px 20px'}}>
+          <div style={{fontSize:11,color:'#c4821f',background:'rgba(196,130,31,.15)',border:'1px solid rgba(196,130,31,.25)',borderRadius:6,padding:'4px 10px',display:'inline-block',marginBottom:4}}>{isAdmin?'⚙ Admin':'● User'}</div>
+          <div style={{fontSize:12,color:'#4a3f35'}}>{profile?.full_name||user.email}</div>
+          <button onClick={()=>sb.auth.signOut()} style={{background:'none',border:'none',color:'#4a3f35',cursor:'pointer',fontSize:11,marginTop:4,padding:0}}>Sign out</button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="pg">
+
+        {/* DASHBOARD */}
+        {page==='dashboard'&&(
+          <div>
+            <div style={{marginBottom:32}}>
+              <div style={{fontSize:12,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:8}}>Overview</div>
+              <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:34,color:'#f0e6d3'}}>Barrel Inventory</h1>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))',gap:16,marginBottom:32}}>
+              <StatCard label="Total Barrels" value={total} accent="#c4821f" sub="All sections"/>
+              <StatCard label="Active" value={active} accent="#22c55e" sub={total>0?`${Math.round(active/total*100)}% of inventory`:''}/>
+              <StatCard label="Leaking" value={leakers} accent="#ef4444" sub="Needs attention"/>
+              <StatCard label="For Dump" value={dumps} accent="#6b5d4f" sub="QA rated 1"/>
+              <StatCard label="Late Fill PI" value={lateFills} accent="#f97316" sub={`>${threshold} day threshold`}/>
+              <StatCard label="Avg QA" value={`${avgQa}/8`} accent="#8b7355" sub="Rated barrels"/>
+            </div>
+
+            {lateFills>0&&(
+              <div style={{background:'rgba(249,115,22,.06)',border:'1px solid rgba(249,115,22,.2)',borderRadius:12,padding:20,marginBottom:20}}>
+                <div style={{fontSize:12,color:'#f97316',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>⚠ Process Indicator — Late Fill Barrels</div>
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:10}}>
+                  {enriched.filter(b=>b._lateFill).slice(0,6).map(b=>(
+                    <div key={b.id} onClick={()=>{setModalBarrel(b);setIsNew(false);}} style={{background:'rgba(249,115,22,.06)',border:'1px solid rgba(249,115,22,.2)',borderRadius:8,padding:'10px 14px',cursor:'pointer'}}>
+                      <div style={{display:'flex',justifyContent:'space-between'}}>
+                        <span style={{fontFamily:'monospace',fontSize:12,color:'#f97316'}}>{b.barcode}</span>
+                        <span style={{fontSize:11,color:'#f97316'}}>{b._lateDays}d late</span>
+                      </div>
+                      <div style={{fontSize:12,color:'#a09080',marginTop:2}}>{b.brands?.name} · {b.distilleries?.name}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="g2">
+              <div className="card">
+                <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>🚨 Needs Attention</div>
+                {enriched.filter(b=>b.leaky||b.status==='dump'||b.status==='flagged').slice(0,8).map(b=>{
+                  const[sc,sl]=scBadge(b.status);
+                  return(
+                    <div key={b.id} onClick={()=>{setModalBarrel(b);setIsNew(false);}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid rgba(255,255,255,.05)',cursor:'pointer'}}>
+                      <div><div style={{fontSize:13,color:'#f0e6d3'}}>{b.brands?.name||'—'}</div><div style={{fontSize:11,color:'#6b5d4f'}}>{b.barcode} · {b.sections?.name||'—'}</div></div>
+                      <div style={{display:'flex',gap:4}}>
+                        {b.leaky&&<Badge label="LEAK" color="#ef4444"/>}
+                        {b.status==='dump'&&<Badge label="DUMP" color="#6b5d4f"/>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {enriched.filter(b=>b.leaky||b.status==='dump'||b.status==='flagged').length===0&&<div style={{fontSize:13,color:'#4a3f35'}}>No issues flagged</div>}
+              </div>
+              <div className="card">
+                <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>⭐ Top Rated Barrels</div>
+                {[...enriched].filter(b=>b.qa_rating).sort((a,b)=>b.qa_rating-a.qa_rating).slice(0,7).map(b=>(
+                  <div key={b.id} onClick={()=>{setModalBarrel(b);setIsNew(false);}} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'9px 0',borderBottom:'1px solid rgba(255,255,255,.05)',cursor:'pointer'}}>
+                    <div><div style={{fontSize:13,color:'#f0e6d3'}}>{b.brands?.name||'—'}</div><div style={{fontSize:11,color:'#6b5d4f'}}>{b.barcode} · {b.barrel_types?.name||'—'}</div></div>
+                    <span style={{background:QAC[b.qa_rating]+'22',color:QAC[b.qa_rating],border:`1px solid ${QAC[b.qa_rating]}44`,borderRadius:6,padding:'2px 7px',fontSize:11,fontWeight:600}}>QA {b.qa_rating}</span>
+                  </div>
+                ))}
+                {enriched.filter(b=>b.qa_rating).length===0&&<div style={{fontSize:13,color:'#4a3f35'}}>No QA ratings yet</div>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* INVENTORY */}
+        {page==='inventory'&&(
+          <div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:24}}>
+              <div>
+                <div style={{fontSize:12,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:4}}>All Barrels</div>
+                <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:'#f0e6d3'}}>Inventory</h1>
+              </div>
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>setPage('batch')} style={{background:'rgba(34,197,94,.1)',border:'1px solid rgba(34,197,94,.25)',borderRadius:10,color:'#22c55e',padding:'11px 18px',cursor:'pointer',fontSize:13,fontFamily:"'Crimson Text',serif"}}>◉ Batch Scan</button>
+                <button onClick={()=>{setIsNew(true);setModalBarrel({});}} style={bP}>+ Add Barrel</button>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:10,marginBottom:20,flexWrap:'wrap'}}>
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search barcode, brand, brew ID…" style={{flex:1,minWidth:200,...iS}}/>
+              <select value={filters.section} onChange={e=>setFilters(f=>({...f,section:e.target.value}))} style={{...sS,width:'auto'}}>
+                <option value="">All Sections</option>{sections.map(s=><option key={s.id}>{s.name}</option>)}
+              </select>
+              <select value={filters.type} onChange={e=>setFilters(f=>({...f,type:e.target.value}))} style={{...sS,width:'auto'}}>
+                <option value="">All Types</option>{types.map(t=><option key={t.id}>{t.name}</option>)}
+              </select>
+              <select value={filters.status} onChange={e=>setFilters(f=>({...f,status:e.target.value}))} style={{...sS,width:'auto'}}>
+                <option value="">All Statuses</option><option value="active">Active</option><option value="flagged">Flagged</option><option value="dump">Dump</option>
+              </select>
+              <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',color:'#a09080',fontSize:13}}>
+                <input type="checkbox" checked={filters.leaky} onChange={e=>setFilters(f=>({...f,leaky:e.target.checked}))} style={{accentColor:'#ef4444'}}/> Leakers
+              </label>
+              <label style={{display:'flex',alignItems:'center',gap:6,cursor:'pointer',color:'#f97316',fontSize:13}}>
+                <input type="checkbox" checked={filters.late} onChange={e=>setFilters(f=>({...f,late:e.target.checked}))} style={{accentColor:'#f97316'}}/> Late Fill PI
+              </label>
+            </div>
+            <div style={{background:'rgba(255,255,255,.02)',border:'1px solid rgba(255,255,255,.07)',borderRadius:12,overflow:'hidden'}}>
+              <div style={{display:'grid',gridTemplateColumns:'100px 1fr 100px 120px 100px 80px',gap:10,padding:'10px 18px',borderBottom:'1px solid rgba(255,255,255,.08)',background:'rgba(255,255,255,.03)'}}>
+                {['Barcode','Brand / Type','Location','Distillery','Flags','QA'].map(h=><div key={h} style={{fontSize:10,color:'#6b5d4f',textTransform:'uppercase',letterSpacing:'.1em'}}>{h}</div>)}
+              </div>
+              {filtered.length===0&&<div style={{padding:32,textAlign:'center',color:'#4a3f35'}}>No barrels match your filters.</div>}
+              {filtered.map(b=>{
+                const[sc,sl]=scBadge(b.status);
+                return(
+                  <div key={b.id} onClick={()=>{setModalBarrel(b);setIsNew(false);}} style={{display:'grid',gridTemplateColumns:'100px 1fr 100px 120px 100px 80px',gap:10,alignItems:'center',padding:'13px 18px',borderBottom:'1px solid rgba(255,255,255,.05)',cursor:'pointer'}}
+                    onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,.04)'}
+                    onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+                    <div style={{fontFamily:'monospace',fontSize:12,color:'#8b7355'}}>{b.barcode}</div>
+                    <div>
+                      <div style={{fontFamily:"'Playfair Display',serif",fontSize:13,color:'#f0e6d3'}}>{b.brands?.name||'—'}</div>
+                      <div style={{fontSize:11,color:'#6b5d4f'}}>{b.brew_id||'—'} · {b.barrel_types?.name||'—'}</div>
+                    </div>
+                    <div style={{fontSize:12,color:'#a09080'}}>{b.sections?.name||'—'} R{b.row_number||'?'}</div>
+                    <div style={{fontSize:11,color:'#6b5d4f'}}>{b.distilleries?.name||'—'}</div>
+                    <div style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                      {b.leaky&&<Badge label="LEAK" color="#ef4444"/>}
+                      {!b.wet&&<Badge label="DRY" color="#8b7355"/>}
+                      {b._lateFill&&<Badge label={`+${b._lateDays}d`} color="#f97316"/>}
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:5}}>
+                      {b.qa_rating&&<><div style={{width:8,height:8,borderRadius:'50%',background:QAC[b.qa_rating]}}/><span style={{fontSize:13,color:'#f0e6d3',fontWeight:600}}>{b.qa_rating}/8</span></>}
+                      {!b.qa_rating&&<span style={{fontSize:11,color:'#4a3f35'}}>—</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{marginTop:10,fontSize:12,color:'#4a3f35'}}>Showing {filtered.length} of {total} barrels</div>
+          </div>
+        )}
+
+        {/* BATCH */}
+        {page==='batch'&&<BatchPage user={user} brands={brands} types={types} dists={dists} sections={sections} threshold={threshold} onDone={loadAll} showToast={showToast}/>}
+
+        {/* LOCATIONS */}
+        {page==='locations'&&(
+          <div>
+            <div style={{marginBottom:28}}>
+              <div style={{fontSize:12,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:4}}>Warehouse</div>
+              <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:'#f0e6d3'}}>Location Browser</h1>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:16}}>
+              {sections.map(sec=>{
+                const sb2=enriched.filter(b=>b.sections?.name===sec.name);
+                const rows=[...new Set(sb2.map(b=>b.row_number).filter(Boolean))].sort();
+                const hasLeak=sb2.some(b=>b.leaky);
+                const hasLate=sb2.some(b=>b._lateFill);
+                return(
+                  <div key={sec.id} className="card">
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+                      <div style={{fontFamily:"'Playfair Display',serif",fontSize:20,color:'#c4821f'}}>{sec.name}</div>
+                      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                        {hasLeak&&<span style={{fontSize:11,color:'#ef4444'}}>⚠</span>}
+                        {hasLate&&<span style={{fontSize:11,color:'#f97316'}}>PI</span>}
+                        <span style={{background:'rgba(196,130,31,.15)',color:'#c4821f',borderRadius:6,padding:'2px 9px',fontSize:12,fontWeight:600}}>{sb2.length}</span>
+                      </div>
+                    </div>
+                    {rows.length===0&&<div style={{fontSize:12,color:'#4a3f35'}}>Empty</div>}
+                    {rows.map(r=>{
+                      const rb=sb2.filter(b=>b.row_number===r);
+                      return(
+                        <div key={r} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                          <span style={{fontSize:13,color:'#a09080'}}>Row {r}</span>
+                          <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                            {rb.some(b=>b.leaky)&&<span style={{fontSize:10,color:'#ef4444'}}>LEAK</span>}
+                            {rb.some(b=>b._lateFill)&&<span style={{fontSize:10,color:'#f97316'}}>PI</span>}
+                            <span style={{fontSize:12,color:'#6b5d4f'}}>{rb.length}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* REPORTS */}
+        {page==='reports'&&(
+          <div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',marginBottom:28}}>
+              <div>
+                <div style={{fontSize:12,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.12em',marginBottom:4}}>Analytics & KPIs</div>
+                <h1 style={{fontFamily:"'Playfair Display',serif",fontSize:28,color:'#f0e6d3'}}>Reports</h1>
+              </div>
+              <button onClick={exportCSV} style={{background:'rgba(196,130,31,.15)',border:'1px solid rgba(196,130,31,.35)',borderRadius:10,color:'#c4821f',padding:'11px 20px',cursor:'pointer',fontWeight:600,fontSize:13,fontFamily:"'Crimson Text',serif"}}>↓ Export CSV</button>
+            </div>
+
+            {/* KPI Summary */}
+            <div style={{background:'rgba(196,130,31,.06)',border:'1px solid rgba(196,130,31,.2)',borderRadius:12,padding:20,marginBottom:20}}>
+              <div style={{fontSize:12,color:'#c4821f',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:16}}>KPI Summary</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:16}}>
+                {[
+                  {label:'Late Fill Rate',value:total>0?`${Math.round(lateFills/total*100)}%`:'—',sub:`${lateFills} of ${total} barrels`,color:'#f97316'},
+                  {label:'Leaker Rate',value:total>0?`${Math.round(leakers/total*100)}%`:'—',sub:`${leakers} leaking`,color:'#ef4444'},
+                  {label:'Dump Rate',value:total>0?`${Math.round(dumps/total*100)}%`:'—',sub:`${dumps} for dump`,color:'#6b5d4f'},
+                  {label:'Avg QA Score',value:`${avgQa}/8`,sub:'Rated barrels',color:'#22c55e'},
+                ].map(k=>(
+                  <div key={k.label} style={{textAlign:'center'}}>
+                    <div style={{fontSize:26,fontFamily:"'Playfair Display',serif",color:k.color,fontWeight:700}}>{k.value}</div>
+                    <div style={{fontSize:12,color:'#8b7355',margin:'4px 0 2px'}}>{k.label}</div>
+                    <div style={{fontSize:11,color:'#4a3f35'}}>{k.sub}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="g2" style={{marginBottom:16}}>
+              <div className="card">
+                <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>By Section</div>
+                {sections.map(s=>{
+                  const sb2=enriched.filter(b=>b.sections?.name===s.name);
+                  const avgQ=sb2.filter(b=>b.qa_rating).length>0?(sb2.reduce((a,b)=>a+(b.qa_rating||0),0)/sb2.filter(b=>b.qa_rating).length).toFixed(1):'—';
+                  const late=sb2.filter(b=>b._lateFill).length;
+                  return(
+                    <div key={s.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                      <span style={{color:'#a09080',fontSize:13}}>{s.name}</span>
+                      <div style={{display:'flex',gap:12}}>
+                        <span style={{fontSize:13,color:'#f0e6d3',fontWeight:600}}>{sb2.length}</span>
+                        <span style={{fontSize:12,color:'#6b5d4f'}}>QA {avgQ}</span>
+                        {late>0&&<span style={{fontSize:11,color:'#f97316'}}>{late} late</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="card">
+                <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>By Brand</div>
+                {brands.map(br=>{
+                  const bb=enriched.filter(b=>b.brands?.name===br.name);
+                  const avgQ=bb.filter(b=>b.qa_rating).length>0?(bb.reduce((a,b)=>a+(b.qa_rating||0),0)/bb.filter(b=>b.qa_rating).length).toFixed(1):'—';
+                  const late=bb.filter(b=>b._lateFill).length;
+                  return(
+                    <div key={br.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                      <span style={{color:'#a09080',fontSize:13}}>{br.name}</span>
+                      <div style={{display:'flex',gap:12}}>
+                        <span style={{fontSize:13,color:'#f0e6d3',fontWeight:600}}>{bb.length}</span>
+                        <span style={{fontSize:12,color:'#6b5d4f'}}>QA {avgQ}</span>
+                        {late>0&&<span style={{fontSize:11,color:'#f97316'}}>{late} PI</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="g2">
+              <div className="card">
+                <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>By Barrel Type</div>
+                {types.map(t=>{
+                  const tb=enriched.filter(b=>b.barrel_types?.name===t.name);
+                  return tb.length===0?null:(
+                    <div key={t.id} style={{marginBottom:10}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:4}}><span style={{fontSize:13,color:'#a09080'}}>{t.name}</span><span style={{fontSize:13,color:'#f0e6d3'}}>{tb.length}</span></div>
+                      <div style={{height:6,background:'rgba(255,255,255,.06)',borderRadius:3}}><div style={{height:'100%',width:`${total>0?tb.length/total*100:0}%`,background:'#c4821f',borderRadius:3}}/></div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="card">
+                <div style={{fontSize:12,color:'#8b7355',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>QA Distribution</div>
+                {[8,7,6,5,4,3,2,1].map(n=>{
+                  const c=enriched.filter(b=>b.qa_rating===n).length;
+                  return(
+                    <div key={n} style={{marginBottom:8}}>
+                      <div style={{display:'flex',justifyContent:'space-between',marginBottom:3}}><span style={{fontSize:12,color:QAC[n]}}>QA {n} — {QAL[n]}</span><span style={{fontSize:12,color:'#6b5d4f'}}>{c}</span></div>
+                      <div style={{height:5,background:'rgba(255,255,255,.06)',borderRadius:3}}><div style={{height:'100%',width:`${total>0?c/total*100:0}%`,background:QAC[n],borderRadius:3}}/></div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Late Fill by Distillery */}
+            {lateFills>0&&(
+              <div style={{background:'rgba(249,115,22,.06)',border:'1px solid rgba(249,115,22,.2)',borderRadius:12,padding:20,marginTop:16}}>
+                <div style={{fontSize:12,color:'#f97316',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:14}}>⚠ Late Fill PI — By Distillery</div>
+                {dists.map(d=>{
+                  const db=enriched.filter(b=>b.distilleries?.name===d.name);
+                  const dlate=db.filter(b=>b._lateFill).length;
+                  if(!dlate)return null;
+                  return(
+                    <div key={d.id} style={{display:'flex',justifyContent:'space-between',padding:'8px 0',borderBottom:'1px solid rgba(255,255,255,.05)'}}>
+                      <span style={{color:'#a09080'}}>{d.name}</span>
+                      <div style={{display:'flex',gap:12}}>
+                        <span style={{color:'#f97316',fontWeight:600}}>{dlate} late</span>
+                        <span style={{color:'#6b5d4f',fontSize:12}}>of {db.length} total ({Math.round(dlate/db.length*100)}%)</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SETTINGS */}
+        {page==='settings'&&isAdmin&&(
+          <SettingsPage threshold={threshold} setThreshold={setThreshold} brands={brands} setBrands={setBrands} types={types} setTypes={setTypes} dists={dists} setDists={setDists} sections={sections} setSections={setSections} showToast={showToast}/>
+        )}
+      </div>
+
+      {/* Barrel Modal */}
+      {modalBarrel!==null&&(
+        <BarrelModal barrel={isNew?null:modalBarrel} onClose={()=>setModalBarrel(null)} onSaved={saveDone} user={user} brands={brands} types={types} dists={dists} sections={sections} threshold={threshold}/>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
